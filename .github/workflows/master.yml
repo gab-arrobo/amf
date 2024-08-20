@@ -9,101 +9,39 @@ on:
     branches:
       - master
   push:
-    branches:
-      - master
 
 jobs:
-  build:
+  e2e-tests:
     runs-on: ubuntu-latest
+    env:
+      REGISTRY: docker.io
+      DOCKER_REGISTRY: docker.io/
+      DOCKER_REPOSITORY: gabearrobo/
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: docker/login-action@v3.3.0
         with:
-          go-version-file: 'go.mod'
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_LOGIN }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Build
-        run: go build
+      - run: echo VERSION=$(cat VERSION) >> $GITHUB_ENV
 
-  docker-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Build and push release Docker image
+        env:
+          DOCKER_TAG: ${{ env.VERSION }}
+        run: |
+          make docker-build
+          make docker-push
 
-      - name: Build Docker image
-        run: make docker-build
+      - name: Run E2E test
+        run: |
+          make run-aiab
 
-  staticcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: WillAbides/setup-go-faster@v1.14.0
-        with:
-          go-version-file: 'go.mod'
-
-      - uses: dominikh/staticcheck-action@v1.3.1
-        with:
-          version: latest
-          install-go: false
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6.1.0
-        with:
-          version: latest
-          args: -v --config ./.golangci.yml
-
-  hadolint:
-    name: hadolint
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Dockerfile linter
-        uses: hadolint/hadolint-action@v3.1.0
-        # For now, ignoring:
-        # DL3008 warning: Pin versions in apt get install (e.g., apt-get install <package>=<version>); and
-        # DL3018 warning: Pin versions in apk add (e.g., apk add <package>=<version>)
-        with:
-          dockerfile: Dockerfile
-          ignore: DL3008,DL3018
-
-  license-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: reuse lint
-        uses: fsfe/reuse-action@v4
-
-  fossa-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: FOSSA scan
-        uses: fossa-contrib/fossa-action@v3
-        with:
-          fossa-api-key: 0c3bbcdf20e157bbd487dae173751b28
-
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Unit tests
-        run: go test ./...
+      - name: Delete temporary Docker Image
+        env:
+          DOCKER_TAG: ${{ env.VERSION }}
+        run: |
+          echo "Deleting Docker image tag: ${DOCKER_TAG}"
+          curl -u ${{ secrets.DOCKERHUB_LOGIN }}:${{ secrets.DOCKERHUB_PASSWORD }} -X "DELETE" https://cloud.docker.com/v2/repositories/${DOCKER_REPOSITORY}/5gc-amf/tags/${DOCKER_TAG}/
