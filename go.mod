@@ -12,20 +12,20 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
-	github.com/omec-project/aper v1.1.2
-	github.com/omec-project/config5g v1.4.3
+	github.com/omec-project/aper v1.1.3
+	github.com/omec-project/config5g v1.4.4
 	github.com/omec-project/metricfunc v1.4.1
 	github.com/omec-project/nas v1.3.0
-	github.com/omec-project/ngap v1.2.2
+	github.com/omec-project/ngap v1.2.3
 	github.com/omec-project/openapi v1.2.1
 	github.com/omec-project/util v1.1.0
-	github.com/prometheus/client_golang v1.20.2
+	github.com/prometheus/client_golang v1.20.3
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli v1.22.15
 	go.mongodb.org/mongo-driver v1.11.7
-	google.golang.org/grpc v1.66.0
+	google.golang.org/grpc v1.66.2
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v2 v2.4.0
 )
