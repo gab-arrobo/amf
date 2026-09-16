@@ -1539,8 +1539,60 @@ func getPublishUeCtxtInfoOp(state fsm.StateType) mi.SubscriberOp {
 	}
 }
 
-// Collect Ctxt info and publish on Kafka stream
-func (ueContext *AmfUe) PublishUeCtxtInfo() {
+// otherAccessType returns the access type other than the one given, since a UE only ever has the
+// two (3GPP and non-3GPP).
+func otherAccessType(accessType models.AccessType) models.AccessType {
+	if accessType == models.ACCESSTYPE__3_GPP_ACCESS {
+		return models.ACCESSTYPE_NON_3_GPP_ACCESS
+	}
+	return models.ACCESSTYPE__3_GPP_ACCESS
+}
+
+// buildKafkaSubscriberContext computes the Kafka subscriber event for the given access type's GMM
+// state, split out from PublishUeCtxtInfo so the op/context computation is testable without a live
+// Kafka writer.
+func (ueContext *AmfUe) buildKafkaSubscriberContext(accessType models.AccessType) (mi.CoreSubscriber, mi.SubscriberOp) {
+	op := getPublishUeCtxtInfoOp(ueContext.State[accessType].Current())
+	// The event is keyed only by IMSI with no per-access discriminator, so a Del from one access
+	// type deregistering would otherwise remove the subscriber from Kafka consumers even though
+	// the other access type is still registered/registering. Downgrade to Mod in that case, and
+	// build the payload from the still-active access so it doesn't overwrite the live subscriber
+	// record with the deregistering access's (stale) state and RAN identifiers. Only delete once
+	// both access types have left the FSM's registered states.
+	if op == mi.SubsOpDel {
+		activeAccessType := otherAccessType(accessType)
+		if otherState := ueContext.State[activeAccessType]; otherState != nil &&
+			getPublishUeCtxtInfoOp(otherState.Current()) != mi.SubsOpDel {
+			op = mi.SubsOpMod
+			accessType = activeAccessType
+		}
+	}
+	kafkaSmCtxt := mi.CoreSubscriber{}
+
+	// Populate kafka sm ctxt struct
+	kafkaSmCtxt.Imsi = ueContext.GetSupi()
+	kafkaSmCtxt.AmfId = ueContext.ServingAMF.NfId
+	kafkaSmCtxt.Guti = ueContext.GetGuti()
+	kafkaSmCtxt.Tmsi = ueContext.GetTmsi()
+	kafkaSmCtxt.AmfIp = ueContext.AmfInstanceIp
+	if ranUe := ueContext.GetRanUe(accessType); ranUe != nil {
+		kafkaSmCtxt.AmfNgapId = ranUe.AmfUeNgapId
+		kafkaSmCtxt.RanNgapId = ranUe.RanUeNgapId
+		kafkaSmCtxt.GnbId = ranUe.Ran.GnbId
+		kafkaSmCtxt.TacId = ranUe.Tai.Tac
+	}
+	kafkaSmCtxt.AmfSubState = string(ueContext.State[accessType].Current())
+	cmState := models.CMSTATE_IDLE
+	if ueContext.CmConnect(accessType) {
+		cmState = models.CMSTATE_CONNECTED
+	}
+	kafkaSmCtxt.UeState = string(cmState)
+
+	return kafkaSmCtxt, op
+}
+
+// Collect Ctxt info and publish on Kafka stream for the given access type's GMM state.
+func (ueContext *AmfUe) PublishUeCtxtInfo(accessType models.AccessType) {
 	if !*factory.AmfConfig.Configuration.KafkaInfo.EnableKafka {
 		return
 	}
@@ -1552,24 +1604,7 @@ func (ueContext *AmfUe) PublishUeCtxtInfo() {
 		return
 	}
 
-	op := getPublishUeCtxtInfoOp(ueContext.State[models.ACCESSTYPE__3_GPP_ACCESS].Current())
-	kafkaSmCtxt := mi.CoreSubscriber{}
-
-	// Populate kafka sm ctxt struct
-	kafkaSmCtxt.Imsi = ueContext.GetSupi()
-	kafkaSmCtxt.AmfId = ueContext.ServingAMF.NfId
-	kafkaSmCtxt.Guti = ueContext.GetGuti()
-	kafkaSmCtxt.Tmsi = ueContext.GetTmsi()
-	kafkaSmCtxt.AmfIp = ueContext.AmfInstanceIp
-	if ranUe := ueContext.GetRanUe(models.ACCESSTYPE__3_GPP_ACCESS); ranUe != nil {
-		kafkaSmCtxt.AmfNgapId = ranUe.AmfUeNgapId
-		kafkaSmCtxt.RanNgapId = ranUe.RanUeNgapId
-		kafkaSmCtxt.GnbId = ranUe.Ran.GnbId
-		kafkaSmCtxt.TacId = ranUe.Tai.Tac
-	}
-	kafkaSmCtxt.AmfSubState = string(ueContext.State[models.ACCESSTYPE__3_GPP_ACCESS].Current())
-	ueState := ueContext.GetCmInfo()
-	kafkaSmCtxt.UeState = string(ueState[0].CmState)
+	kafkaSmCtxt, op := ueContext.buildKafkaSubscriberContext(accessType)
 
 	// Send to stream
 	if err := metrics.GetWriter().PublishUeCtxtEvent(kafkaSmCtxt, op); err != nil {

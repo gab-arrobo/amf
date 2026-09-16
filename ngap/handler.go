@@ -1258,7 +1258,7 @@ func HandleUEContextReleaseComplete(ctx ctxt.Context, ran *context.AmfRan, messa
 		if err != nil {
 			ran.Log.Errorln(err.Error())
 		}
-		amfUe.PublishUeCtxtInfo()
+		amfUe.PublishUeCtxtInfo(ran.AnType)
 		context.StoreContextInDB(amfUe)
 	case context.UeContextReleaseUeContext:
 		ran.Log.Infof("Release UE[%s] Context : Release Ue Context", amfUe.GetSupi())
@@ -1270,11 +1270,11 @@ func HandleUEContextReleaseComplete(ctx ctxt.Context, ran *context.AmfRan, messa
 		// Valid Security is not exist for this UE then only delete AMfUe Context
 		if !amfUe.SecurityContextAvailable {
 			ran.Log.Infof("Valid Security is not exist for the UE[%s], so deleting AmfUe Context", amfUe.GetSupi())
-			amfUe.PublishUeCtxtInfo()
+			amfUe.PublishUeCtxtInfo(ran.AnType)
 			amfUe.Remove()
 			context.DeleteContextFromDB(amfUe)
 		} else {
-			amfUe.PublishUeCtxtInfo()
+			amfUe.PublishUeCtxtInfo(ran.AnType)
 			context.StoreContextInDB(amfUe)
 		}
 	case context.UeContextReleaseDueToNwInitiatedDeregistraion:
@@ -1283,7 +1283,7 @@ func HandleUEContextReleaseComplete(ctx ctxt.Context, ran *context.AmfRan, messa
 		if err != nil {
 			ran.Log.Errorln(err.Error())
 		}
-		amfUe.PublishUeCtxtInfo()
+		amfUe.PublishUeCtxtInfo(ran.AnType)
 		amfUe.Remove()
 		context.DeleteContextFromDB(amfUe)
 	case context.UeContextReleaseHandover:
@@ -1306,7 +1306,7 @@ func HandleUEContextReleaseComplete(ctx ctxt.Context, ran *context.AmfRan, messa
 			ran.Log.Errorln(err.Error())
 		}
 		amfUe.AttachRanUe(targetRanUe)
-		amfUe.PublishUeCtxtInfo()
+		amfUe.PublishUeCtxtInfo(ran.AnType)
 		// Todo: remove indirect tunnel
 	default:
 		ran.Log.Errorf("Invalid Release Action[%d]", ranUe.ReleaseAction)
@@ -1947,7 +1947,7 @@ func HandlePDUSessionResourceSetupResponse(ctx ctxt.Context, ran *context.AmfRan
 		}
 
 		// store context in DB. PDU Establishment is complete.
-		amfUe.PublishUeCtxtInfo()
+		amfUe.PublishUeCtxtInfo(ran.AnType)
 		context.StoreContextInDB(amfUe)
 	}
 
@@ -2617,7 +2617,7 @@ func HandleInitialContextSetupResponse(ctx ctxt.Context, ran *context.AmfRan, me
 		printCriticalityDiagnostics(ran, criticalityDiagnostics)
 	}
 	ranUe.RecvdInitialContextSetupResponse = true
-	amfUe.PublishUeCtxtInfo()
+	amfUe.PublishUeCtxtInfo(ran.AnType)
 	context.StoreContextInDB(amfUe)
 }
 
